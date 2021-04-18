@@ -183,6 +183,7 @@ def configurable(init_func=None, *, from_config=None):
             return configurable  # @configurable() is made equivalent to @configurable
         assert inspect.isfunction(
             from_config
+
         ), "from_config argument of configurable must be a function!"
 
         def wrapper(orig_func):
