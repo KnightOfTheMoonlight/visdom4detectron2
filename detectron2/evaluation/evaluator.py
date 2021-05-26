@@ -99,6 +99,8 @@ class DatasetEvaluators(DatasetEvaluator):
         return results
 
 
+
+
 def inference_on_dataset(model, data_loader, evaluator):
     """
     Run model on the data_loader and evaluate the metrics with evaluator.
@@ -122,7 +124,7 @@ def inference_on_dataset(model, data_loader, evaluator):
     """
     num_devices = get_world_size()
     logger = logging.getLogger(__name__)
-    logger.info("Start inference on {} images".format(len(data_loader)))
+    # logger.info("Start inference on {} images".format(len(data_loader)))
 
     total = len(data_loader)  # inference data loader must have a fixed length
     if evaluator is None:
@@ -144,6 +146,11 @@ def inference_on_dataset(model, data_loader, evaluator):
                 total_compute_time = 0
 
             start_compute_time = time.perf_counter()
+            # if type(inputs[0]) == list or type(inputs[0] == dict):
+            #     print("inputs shape is {}".format(len(inputs[0])))
+            # elif type(inputs[0] == torch.tensor):
+            #     print("inputs shape is {}".format(inputs[0].shape))
+
             outputs = model(inputs)
             if torch.cuda.is_available():
                 torch.cuda.synchronize()

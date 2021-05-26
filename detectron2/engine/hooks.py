@@ -146,6 +146,8 @@ class IterationTimer(HookBase):
         self._total_timer.pause()
 
 
+
+
 class PeriodicWriter(HookBase):
     """
     Write events to EventStorage (by calling ``writer.write()``) periodically.

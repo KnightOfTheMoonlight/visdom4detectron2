@@ -17,7 +17,7 @@ from collections import OrderedDict
 from typing import Optional
 import torch
 from fvcore.nn.precise_bn import get_bn_modules
-from torch.nn.parallel import DistributedDataParallel
+from torch.nn.parallel import DataParallel, DistributedDataParallel
 
 import detectron2.data.transforms as T
 from detectron2.checkpoint import DetectionCheckpointer
@@ -43,6 +43,8 @@ from detectron2.utils.logger import setup_logger
 
 from . import hooks
 from .train_loop import AMPTrainer, SimpleTrainer, TrainerBase
+
+from detectron2.utils.visdom_plot import VisdomPlotter
 
 __all__ = [
     "default_argument_parser",
@@ -306,19 +308,36 @@ class DefaultTrainer(TrainerBase):
             setup_logger()
         cfg = DefaultTrainer.auto_scale_workers(cfg, comm.get_world_size())
 
+
+        from datetime import datetime
+        self.env_name = str(cfg.name) + '_' + datetime.now().strftime('%m%d%H%M%S')
+        # if not os.path.exists(os.path.join("./logs", self.env_name)):
+        #      os.mkdir(os.path.join("./logs", self.env_name))
+             # print("env_name folder created!")
+
         # Assume these objects must be constructed in this order.
         model = self.build_model(cfg)
         optimizer = self.build_optimizer(cfg, model)
         data_loader = self.build_train_loader(cfg)
+        visdom_plotter = self.build_visdom_plotter(self.env_name)
 
         # For training, wrap with DDP. But don't need this for inference.
         if comm.get_world_size() > 1:
             model = DistributedDataParallel(
                 model, device_ids=[comm.get_local_rank()], broadcast_buffers=False
             )
+            # model = DataParallel(model)
         self._trainer = (AMPTrainer if cfg.SOLVER.AMP.ENABLED else SimpleTrainer)(
-            model, data_loader, optimizer
+            model, data_loader, optimizer, visdom_plotter
         )
+
+
+        if hasattr(cfg["SOLVER"],"NUM_EPOCHS"):
+            cfg.defrost()
+            cfg.SOLVER.MAX_ITER = cfg.SOLVER.NUM_EPOCHS * data_loader.batch_sampler.sampler._size
+            self.iter_per_epoch = data_loader.batch_sampler.sampler._size
+            cfg.TEST.EVAL_PERIOD = self.iter_per_epoch
+            cfg.freeze()
 
         self.scheduler = self.build_lr_scheduler(cfg, optimizer)
         # Assume no other objects need to be checkpointed.
@@ -361,6 +380,18 @@ class DefaultTrainer(TrainerBase):
             if TORCH_VERSION >= (1, 7):
                 self.model._sync_params_and_buffers()
             self.start_iter = comm.all_gather(self.start_iter)[0]
+
+    @classmethod
+    def build_visdom_plotter(cls, env_name):
+        """
+        Build visdom plotter for this trainner
+
+        Returns:
+            Visdom_plotter()
+        """
+
+        return VisdomPlotter(env_name = env_name)
+
 
     def build_hooks(self):
         """
@@ -534,6 +565,7 @@ Alternatively, you can call evaluation functions yourself (see Colab balloon tut
 
         results = OrderedDict()
         for idx, dataset_name in enumerate(cfg.DATASETS.TEST):
+            # print("idx is {}".format(idx))
             data_loader = cls.build_test_loader(cfg, dataset_name)
             # When evaluators are passed in as arguments,
             # implicitly assume that evaluators can be created before data_loader.

@@ -131,14 +131,29 @@ class TrainerBase:
 
         self.iter = self.start_iter = start_iter
         self.max_iter = max_iter
+        from tqdm import tqdm
+        import sys
 
         with EventStorage(start_iter) as self.storage:
             try:
                 self.before_train()
-                for self.iter in range(start_iter, max_iter):
-                    self.before_step()
-                    self.run_step()
-                    self.after_step()
+                with tqdm(total=(max_iter - start_iter), file=sys.stdout) as pbar:
+
+                    for self.iter in range(start_iter, max_iter):
+
+                        self.before_step()
+                        self.run_step()
+                        self.after_step()
+
+                        if hasattr(self, 'iter_per_epoch'):
+                            if self.iter % self.iter_per_epoch == 0:
+
+                                pbar.update(self.iter_per_epoch)
+                                # logger.info(/n)
+                                logger.info("\n--------------------------------------------------------------------------------------------------------------".format(int(self.iter / self.iter_per_epoch)))
+                                logger.info("\n-----------------------------------------[ Training Epoch {}: Done! ]-----------------------------------------".format(int(self.iter / self.iter_per_epoch)))
+                                logger.info("\n--------------------------------------------------------------------------------------------------------------".format(int(self.iter / self.iter_per_epoch)))
+
                 # self.iter == max_iter can be used by `after_train` to
                 # tell whether the training successfully finished or failed
                 # due to exceptions.
@@ -193,7 +208,7 @@ class SimpleTrainer(TrainerBase):
     or write your own training loop.
     """
 
-    def __init__(self, model, data_loader, optimizer):
+    def __init__(self, model, data_loader, optimizer, visdom_plotter):
         """
         Args:
             model: a torch Module. Takes a data from data_loader and returns a
@@ -215,6 +230,7 @@ class SimpleTrainer(TrainerBase):
         self.data_loader = data_loader
         self._data_loader_iter = iter(data_loader)
         self.optimizer = optimizer
+        self.visdom_plotter = visdom_plotter
 
     def run_step(self):
         """
@@ -242,6 +258,9 @@ class SimpleTrainer(TrainerBase):
         losses.backward()
 
         self._write_metrics(loss_dict, data_time)
+        loss_dict["total_loss"] = losses
+        self._visdom_plot(loss_dict)
+
 
         """
         If you need gradient clipping/scaling or other processing, you can
@@ -249,6 +268,23 @@ class SimpleTrainer(TrainerBase):
         suboptimal as explained in https://arxiv.org/abs/2006.15704 Sec 3.2.4
         """
         self.optimizer.step()
+
+    def _visdom_plot(
+        self,
+        loss_dict: Dict[str, torch.Tensor],
+
+    ):
+        """
+        Args:
+            loss_dict (dict): dict of scalar losses
+        """
+        metrics_dict = {k: v.detach().cpu().item() for k, v in loss_dict.items()}
+        # [self.visdom_plotter.plot(k, 'train', k, self.iter, v) for k,v in metrics_dict]
+        for k, v in loss_dict.items():
+            self.visdom_plotter.plot(k, 'train', k, self.iter, v.detach().cpu().item())
+            # self.visdom_plotter.save()
+
+
 
     def _write_metrics(
         self,
