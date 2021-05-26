@@ -13,7 +13,7 @@ Specifically, you can modify your server IP in [detectron2/utils/visdom_plot.py]
 
 
 * training with epoch shown by tqdm.
-<img src=".github/training_epoch_tqdm.png" width="600" >
+<img src=".github/training_epoch_tqdm.png" width="800" >
 
 By default, detectron2 only support max_iter training setup.
 The modifications are generally located in [detectron2/engine/train_loop.py](detectron2/engine/train_loop.py) and [detectron2/engine/defaults.py](detectron2/engine/defaults.py)
